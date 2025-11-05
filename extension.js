@@ -47,9 +47,16 @@ const MR_DBUS_IFACE = `
         <method name="FocusClass">
             <arg type="s" direction="out" />
         </method>
+        <method name="FocusWorkspace">
+            <arg type="s" direction="out" />
+        </method>
         <method name="Activate">
             <arg type="s" direction="in" name="window_id"/>
             <arg type="b" direction="out"/>
+        </method>
+        <method name="SwitchWorkspace">
+            <arg type="s" direction="in" name="index"/>
+            <arg type="b" direction="out" />
         </method>
     </interface>
 </node>`;
@@ -66,9 +73,36 @@ export default class WCExtension {
         delete this._dbus;
     }
     List() {
+        let wm = global.workspace_manager;
+        let workspaceCount = 0;
+        try {
+            workspaceCount = wm.get_n_workspaces();
+        } catch (e) {
+            // Fallback in case API shape differs
+            workspaceCount = wm.n_workspaces ?? 0;
+        }
+
         let win = global.get_window_actors()
             .map(a => a.meta_window)
-            .map(w => ({ class: w.get_wm_class(), pid: w.get_pid(), id: w.get_id(), maximized: w.get_maximized(), focus: w.has_focus(), title: w.get_title() }));
+            .map(w => ({
+                class: w.get_wm_class(),
+                pid: w.get_pid(),
+                id: w.get_id(),
+                maximized: w.get_maximized(),
+                focus: w.has_focus(),
+                title: w.get_title(),
+                workspace: w.is_on_all_workspaces() ? -1 : (w.get_workspace() ? w.get_workspace().index() : -1),
+                on_all_workspaces: w.is_on_all_workspaces(),
+                workspaces: (() => {
+                    if (w.is_on_all_workspaces())
+                        return Array.from({ length: workspaceCount }, (_v, i) => i);
+                    let ws = w.get_workspace();
+                    if (!ws)
+                        return [];
+                    let idx = ws.index();
+                    return idx >= 0 ? [idx] : [];
+                })(),
+            }));
         return JSON.stringify(win);
     }
     FocusTitle() {
@@ -115,6 +149,20 @@ export default class WCExtension {
         }
         return "";
     }
+    FocusWorkspace() {
+        let win = global.get_window_actors()
+            .map(a => a.meta_window)
+            .map(w => ({
+                focus: w.has_focus(),
+                workspace: w.is_on_all_workspaces() ? -1 : (w.get_workspace() ? w.get_workspace().index() : -1)
+            }));
+        for (let [_ignore, aWindow] of win.entries()) {
+            let [focus, theWorkspace] = Object.entries(aWindow);
+            if (focus[1] == true)
+                return "" + theWorkspace[1]; // number to string
+        }
+        return "";
+    }
     Activate(windowId) {
         let targetId = parseInt(windowId);
         let win = global.get_window_actors()
@@ -126,5 +174,28 @@ export default class WCExtension {
             return true;
         }
         return false;
+    }
+    SwitchWorkspace(indexStr) {
+        let wm = global.workspace_manager;
+        let count = 0;
+        try {
+            count = wm.get_n_workspaces();
+        } catch (_e) {
+            count = wm.n_workspaces ?? 0;
+        }
+
+        let idx = parseInt(indexStr);
+        if (isNaN(idx) || idx < 0 || idx >= count)
+            return false;
+
+        try {
+            let ws = wm.get_workspace_by_index(idx);
+            if (!ws)
+                return false;
+            ws.activate(global.get_current_time());
+            return true;
+        } catch (_e) {
+            return false;
+        }
     }
 }
