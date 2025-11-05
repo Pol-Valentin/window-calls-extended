@@ -37,7 +37,28 @@ Available methods are:
 * org.gnome.Shell.Extensions.WindowsExt.FocusPID
 * org.gnome.Shell.Extensions.WindowsExt.FocusID
 * org.gnome.Shell.Extensions.WindowsExt.FocusClass
+* org.gnome.Shell.Extensions.WindowsExt.FocusWorkspace
 * org.gnome.Shell.Extensions.WindowsExt.Activate
+* org.gnome.Shell.Extensions.WindowsExt.SwitchWorkspace
+
+### Workspace information
+
+`List` now inclut des champs supplémentaires par fenêtre:
+- `workspace`: index du bureau (base 0); `-1` si la fenêtre est visible sur tous les bureaux ou si l’index est indisponible.
+- `on_all_workspaces`: booléen indiquant si la fenêtre est visible sur tous les bureaux.
+- `workspaces`: tableau des index de bureaux sur lesquels la fenêtre est visible. Pour une fenêtre “sticky”, la liste couvre tous les bureaux existants; sinon un tableau avec l’index unique.
+
+To get the workspace of the focused window:
+```sh
+gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/WindowsExt --method org.gnome.Shell.Extensions.WindowsExt.FocusWorkspace
+```
+
+### Change workspace
+
+Switch to a workspace by index (0-based):
+```sh
+gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell/Extensions/WindowsExt --method org.gnome.Shell.Extensions.WindowsExt.SwitchWorkspace 2
+```
 
 ## Using from C++
 If using from C++, it requires the dbus-1 library. Parameters for the call to `dbus_message_new_method_call` would be
