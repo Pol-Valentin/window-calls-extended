@@ -28,6 +28,7 @@
 /* exported init */
 
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
 const MR_DBUS_IFACE = `
 <node>
@@ -58,6 +59,12 @@ const MR_DBUS_IFACE = `
             <arg type="s" direction="in" name="index"/>
             <arg type="b" direction="out" />
         </method>
+        <signal name="FocusChanged">
+            <arg type="i" name="window_id"/>
+            <arg type="i" name="pid"/>
+            <arg type="s" name="wm_class"/>
+            <arg type="s" name="title"/>
+        </signal>
     </interface>
 </node>`;
 
@@ -65,12 +72,36 @@ export default class WCExtension {
     enable() {
         this._dbus = Gio.DBusExportedObject.wrapJSObject(MR_DBUS_IFACE, this);
         this._dbus.export(Gio.DBus.session, '/org/gnome/Shell/Extensions/WindowsExt');
+
+        // Listen for focus changes
+        this._focusWindowId = global.display.connect('notify::focus-window', () => {
+            this._emitFocusChanged();
+        });
     }
 
     disable() {
+        // Disconnect focus listener
+        if (this._focusWindowId) {
+            global.display.disconnect(this._focusWindowId);
+            this._focusWindowId = null;
+        }
+
         this._dbus.flush();
         this._dbus.unexport();
         delete this._dbus;
+    }
+
+    _emitFocusChanged() {
+        let focusedWindow = global.display.focus_window;
+        if (focusedWindow) {
+            let windowId = focusedWindow.get_id();
+            let pid = focusedWindow.get_pid();
+            let wmClass = focusedWindow.get_wm_class() || '';
+            let title = focusedWindow.get_title() || '';
+
+            this._dbus.emit_signal('FocusChanged',
+                new GLib.Variant('(iiss)', [windowId, pid, wmClass, title]));
+        }
     }
     List() {
         let wm = global.workspace_manager;
